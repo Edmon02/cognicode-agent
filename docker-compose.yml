@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://backend:5000
+    depends_on:
+      - backend
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Backend (Flask)
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - PYTHONPATH=/app
+    volumes:
+      - ./server:/app
+      - ./models:/app/models  # Mount AI models directory
+    command: python app.py
+
+  # Model downloader (one-time setup)
+  model-setup:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    volumes:
+      - ./models:/app/models
+    command: python scripts/download_models.py
+    profiles:
+      - setup
+
+volumes:
+  models:
+    driver: local

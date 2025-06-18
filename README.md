@@ -267,7 +267,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 ### Development Setup
 ```bash
 # Fork and clone the repository
-git clone https://github.com/Edmon02/cognicode-agent.git
+git clone https://github.com/yourusername/cognicode-agent.git
 
 # Create a feature branch
 git checkout -b feature/amazing-feature

@@ -1,0 +1,29 @@
+# CogniCode Agent - Python Dependencies
+# Core Flask dependencies
+Flask==2.3.3
+Flask-SocketIO==5.3.6
+Flask-CORS==4.0.0
+
+# AI/ML dependencies
+torch==2.1.0
+transformers==4.35.0
+tokenizers==0.14.1
+numpy==1.24.3
+scipy==1.11.3
+
+# Optional: For GPU support (uncomment if needed)
+# torch==2.1.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html
+
+# Development dependencies
+pytest==7.4.2
+pytest-flask==1.3.0
+black==23.9.1
+flake8==6.1.0
+
+# Production dependencies
+gunicorn==21.2.0
+python-dotenv==1.0.0
+
+# Utility dependencies
+python-dateutil==2.8.2
+requests==2.31.0
