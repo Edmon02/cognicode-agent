@@ -193,7 +193,7 @@ if __name__ == '__main__':
         sys.exit(1)
     
     # Start the server
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 8000))
     debug = os.environ.get('FLASK_ENV') == 'development'
     
     logger.info(f'Starting CogniCode backend server on port {port}')

@@ -1,0 +1,254 @@
+# =============================================================================
+# CogniCode Agent - Professional .gitignore
+# Full-stack Next.js + Python Flask application
+# =============================================================================
+
+# Dependencies and Package Managers
+# =============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.yarn/
+bun.lockb
+
+# Next.js Build Output
+# =============================================================================
+.next/
+out/
+dist/
+build/
+
+# Next.js Runtime and Cache
+# =============================================================================
+.next/
+/.next/
+.vercel
+.turbo
+
+# Environment Variables
+# =============================================================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# IDE and Editor Files
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs and Debugging
+# =============================================================================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+
+# Testing and Coverage
+# =============================================================================
+coverage/
+*.lcov
+.nyc_output
+.coverage
+htmlcov/
+.pytest_cache/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Python Virtual Environments and Cache
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.nox/
+
+# Python Distribution / Packaging
+# =============================================================================
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+build/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# AI/ML Model Files and Data
+# =============================================================================
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.onnx
+*.pb
+*.tflite
+models/
+checkpoints/
+data/
+datasets/
+*.csv
+*.json.gz
+*.parquet
+
+# PyTorch specific
+*.pth
+*.pt
+
+# Jupyter Notebooks
+# =============================================================================
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+profile_default/
+ipython_config.py
+
+# Docker
+# =============================================================================
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# Operating System
+# =============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Temporary and Runtime Files
+# =============================================================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.backup
+.cache/
+tmp/
+temp/
+
+# Production and Deployment
+# =============================================================================
+.vercel
+.serverless/
+.netlify/
+.firebase/
+
+# Monitoring and Analytics
+# =============================================================================
+.nyc_output/
+lib-cov
+.grunt
+.lock-wscript
+.wafpickle-*
+.node_repl_history
+*.tgz
+.npm
+.eslintcache
+.stylelintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Local Configuration
+# =============================================================================
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+config/local.json
+config/development.json
+
+# Security
+# =============================================================================
+*.pem
+*.key
+*.crt
+*.p12
+secrets.json
+.secrets/
+
+# Miscellaneous
+# =============================================================================
+*.tsbuildinfo
+.eslintcache
+*.trace
+.yarn-integrity
+.parcel-cache/
+storybook-static/

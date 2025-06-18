@@ -112,20 +112,21 @@ The AI will detect:
 ### Multi-Agent System
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Linter Agent  │    │ Refactor Agent  │    │ TestGen Agent   │
-│                 │    │                 │    │                 │
-│ • Bug Detection │    │ • Code Optimization│ • Unit Tests     │
-│ • Style Analysis│    │ • Pattern Improve. │ • Edge Cases     │
-│ • Security Check│    │ • Performance Tune │ • Integration    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+┌─────────────────┐    ┌────────────────────┐    ┌─────────────────┐
+│   Linter Agent  │    │ Refactor Agent     │    │ TestGen Agent   │
+│                 │    │                    │    │                 │
+│ • Bug Detection │    │ • Code Optimization│    │ • Unit Tests    │
+│ • Style Analysis│    │ • Pattern Improve. │    │ • Edge Cases    │
+│ • Security Check│    │ • Performance Tune │    │ • Integration   │
+└─────────────────┘    └────────────────────┘    └─────────────────┘
          │                       │                       │
          └───────────────────────┼───────────────────────┘
                                  │
                     ┌─────────────────┐
                     │  Code Service   │
                     │                 │
-                    │ • Result Processing │
+                    │ • Result        │
+                    │   Processing    │
                     │ • Caching       │
                     │ • Coordination  │
                     └─────────────────┘
@@ -267,7 +268,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 ### Development Setup
 ```bash
 # Fork and clone the repository
-git clone https://github.com/yourusername/cognicode-agent.git
+git clone https://github.com/Edmon02/cognicode-agent.git
 
 # Create a feature branch
 git checkout -b feature/amazing-feature
