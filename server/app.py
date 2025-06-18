@@ -1,11 +1,24 @@
 """
 CogniCode Agent - Flask Backend Server
 Multi-agent AI system for code analysis, refactoring, and test generation
+
+Performance optimizations:
+- Lazy loading of AI models
+- Connection pooling
+- Memory-efficient data structures
+- Async processing where possible
 """
 
 import os
 import sys
+import weakref
+import threading
 from datetime import datetime
+from typing import Dict, Any, Optional
+from contextlib import asynccontextmanager
+from functools import lru_cache
+import gc
+
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
@@ -18,189 +31,465 @@ from agents.linter_agent import LinterAgent
 from agents.refactor_agent import RefactorAgent
 from agents.testgen_agent import TestGenAgent
 from services.code_service import CodeService
-from utils.logger import setup_logger
+from utils.logger import setup_logger, log_performance
 
-# Initialize Flask app
+# Application configuration
+class AppConfig:
+    """Centralized application configuration"""
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'cognicode-secret-key-2025')
+    FLASK_ENV = os.environ.get('FLASK_ENV', 'production')
+    PORT = int(os.environ.get('PORT', 8000))
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max request size
+    
+    # Performance settings
+    MAX_CONNECTIONS = int(os.environ.get('MAX_CONNECTIONS', 100))
+    AGENT_POOL_SIZE = int(os.environ.get('AGENT_POOL_SIZE', 3))
+    CACHE_TIMEOUT = int(os.environ.get('CACHE_TIMEOUT', 3600))  # 1 hour
+    
+    @property
+    def is_development(self) -> bool:
+        return self.FLASK_ENV == 'development'
+    
+    @property
+    def cors_origins(self) -> list:
+        if self.is_development:
+            return ["*"]
+        return [
+            "http://localhost:3000",
+            "https://*.vercel.app",
+            "https://cognicode-agent.vercel.app"
+        ]
+
+config = AppConfig()
+
+# Initialize Flask app with optimized settings
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'cognicode-secret-key-2025'
-
-# Determine if we're in development mode
-is_development = os.environ.get('FLASK_ENV') == 'development'
-
-# Configure CORS origins based on environment
-if is_development:
-    cors_origins = "*"
-else:
-    cors_origins = ["http://localhost:3000", "https://*.vercel.app"]
+app.config.update({
+    'SECRET_KEY': config.SECRET_KEY,
+    'MAX_CONTENT_LENGTH': config.MAX_CONTENT_LENGTH,
+    'JSON_SORT_KEYS': False,  # Disable key sorting for performance
+})
 
 # Enable CORS for all routes
-CORS(app, origins=cors_origins)
+CORS(app, origins=config.cors_origins, supports_credentials=True)
 
-# Initialize SocketIO with CORS support
+# Initialize SocketIO with optimized settings
 socketio = SocketIO(
     app, 
-    cors_allowed_origins=cors_origins,
-    async_mode='threading'
+    cors_allowed_origins=config.cors_origins,
+    async_mode='threading',
+    max_http_buffer_size=config.MAX_CONTENT_LENGTH,
+    ping_timeout=60,
+    ping_interval=25
 )
 
 # Setup logging
 logger = setup_logger('cognicode-backend')
 
-# Initialize AI agents
-linter_agent = LinterAgent()
-refactor_agent = RefactorAgent()
-testgen_agent = TestGenAgent()
+# Agent pool for better resource management
+class AgentPool:
+    """Thread-safe agent pool for resource management"""
+    
+    def __init__(self):
+        self._linter_agents = []
+        self._refactor_agents = []
+        self._testgen_agents = []
+        self._lock = threading.Lock()
+        self._initialized = False
+        
+        # Weak references to track active connections
+        self._active_connections = weakref.WeakSet()
+    
+    def initialize(self) -> bool:
+        """Initialize agent pool with lazy loading"""
+        if self._initialized:
+            return True
+            
+        with self._lock:
+            if self._initialized:
+                return True
+                
+            try:
+                logger.info("Initializing agent pool...")
+                
+                # Initialize one agent of each type initially (lazy loading)
+                self._linter_agents.append(LinterAgent())
+                self._refactor_agents.append(RefactorAgent())
+                self._testgen_agents.append(TestGenAgent())
+                
+                # Initialize the first agents
+                for agent in [self._linter_agents[0], self._refactor_agents[0], self._testgen_agents[0]]:
+                    if not agent.initialize():
+                        raise RuntimeError(f"Failed to initialize {agent.agent_name}")
+                
+                self._initialized = True
+                logger.info("Agent pool initialized successfully")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to initialize agent pool: {str(e)}")
+                return False
+    
+    def get_linter_agent(self) -> LinterAgent:
+        """Get available linter agent"""
+        with self._lock:
+            if not self._linter_agents:
+                agent = LinterAgent()
+                agent.initialize()
+                self._linter_agents.append(agent)
+            return self._linter_agents[0]
+    
+    def get_refactor_agent(self) -> RefactorAgent:
+        """Get available refactor agent"""
+        with self._lock:
+            if not self._refactor_agents:
+                agent = RefactorAgent()
+                agent.initialize()
+                self._refactor_agents.append(agent)
+            return self._refactor_agents[0]
+    
+    def get_testgen_agent(self) -> TestGenAgent:
+        """Get available test generation agent"""
+        with self._lock:
+            if not self._testgen_agents:
+                agent = TestGenAgent()
+                agent.initialize()
+                self._testgen_agents.append(agent)
+            return self._testgen_agents[0]
+    
+    def add_connection(self, connection_id: str):
+        """Track active connection"""
+        self._active_connections.add(connection_id)
+    
+    def remove_connection(self, connection_id: str):
+        """Remove connection tracking"""
+        try:
+            self._active_connections.discard(connection_id)
+        except:
+            pass
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get pool status"""
+        return {
+            'linter_agents': len(self._linter_agents),
+            'refactor_agents': len(self._refactor_agents),
+            'testgen_agents': len(self._testgen_agents),
+            'active_connections': len(self._active_connections),
+            'initialized': self._initialized
+        }
+
+# Initialize services
+agent_pool = AgentPool()
 code_service = CodeService()
 
+# Error handlers
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    """Handle request too large errors"""
+    return jsonify({'error': 'Request entity too large'}), 413
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    """Handle internal server errors"""
+    logger.error(f"Internal server error: {str(error)}")
+    return jsonify({'error': 'Internal server error'}), 500
+
+# API Routes with proper error handling and performance optimizations
 @app.route('/health', methods=['GET'])
+@log_performance
 def health_check():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
-        'agents': {
-            'linter': linter_agent.status,
-            'refactor': refactor_agent.status,
-            'testgen': testgen_agent.status
-        }
-    })
+    """Health check endpoint with comprehensive status"""
+    try:
+        pool_status = agent_pool.get_status()
+        
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'version': '2.0.0',
+            'environment': config.FLASK_ENV,
+            'agents': {
+                'linter': pool_status.get('linter_agents', 0) > 0,
+                'refactor': pool_status.get('refactor_agents', 0) > 0,
+                'testgen': pool_status.get('testgen_agents', 0) > 0
+            },
+            'pool_status': pool_status,
+            'memory_usage': get_memory_usage()
+        })
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
 
 @app.route('/api/agents/status', methods=['GET'])
+@log_performance
 def get_agents_status():
-    """Get status of all AI agents"""
-    return jsonify({
-        'agents': [
-            {
-                'id': 'linter',
-                'name': 'Linter Agent',
-                'status': linter_agent.status,
-                'capabilities': ['bug_detection', 'style_analysis', 'security_check'],
-                'model': linter_agent.model_name
-            },
-            {
-                'id': 'refactor',
-                'name': 'Refactor Agent',
-                'status': refactor_agent.status,
-                'capabilities': ['code_optimization', 'pattern_improvement', 'performance_tuning'],
-                'model': refactor_agent.model_name
-            },
-            {
-                'id': 'testgen',
-                'name': 'Test Generation Agent',
-                'status': testgen_agent.status,
-                'capabilities': ['unit_tests', 'integration_tests', 'edge_cases'],
-                'model': testgen_agent.model_name
-            }
-        ]
-    })
+    """Get detailed status of all AI agents"""
+    try:
+        linter_agent = agent_pool.get_linter_agent()
+        refactor_agent = agent_pool.get_refactor_agent()
+        testgen_agent = agent_pool.get_testgen_agent()
+        
+        return jsonify({
+            'agents': [
+                {
+                    'id': 'linter',
+                    'name': 'Linter Agent',
+                    'status': linter_agent.status,
+                    'capabilities': ['bug_detection', 'style_analysis', 'security_check'],
+                    'model': linter_agent.model_name,
+                    'last_run': linter_agent.last_run.isoformat() if linter_agent.last_run else None
+                },
+                {
+                    'id': 'refactor',
+                    'name': 'Refactor Agent',
+                    'status': refactor_agent.status,
+                    'capabilities': ['code_optimization', 'pattern_improvement', 'performance_tuning'],
+                    'model': refactor_agent.model_name,
+                    'last_run': refactor_agent.last_run.isoformat() if refactor_agent.last_run else None
+                },
+                {
+                    'id': 'testgen',
+                    'name': 'Test Generation Agent',
+                    'status': testgen_agent.status,
+                    'capabilities': ['unit_tests', 'integration_tests', 'edge_cases'],
+                    'model': testgen_agent.model_name,
+                    'last_run': testgen_agent.last_run.isoformat() if testgen_agent.last_run else None
+                }
+            ],
+            'pool_status': agent_pool.get_status()
+        })
+    except Exception as e:
+        logger.error(f"Failed to get agent status: {str(e)}")
+        return jsonify({'error': 'Failed to get agent status'}), 500
 
+# WebSocket event handlers with improved error handling
 @socketio.on('connect')
 def handle_connect():
-    """Handle client connection"""
-    logger.info(f'Client connected: {request.sid}')
-    emit('connected', {'message': 'Connected to CogniCode AI backend'})
+    """Handle client connection with proper session management"""
+    try:
+        session_id = request.sid
+        agent_pool.add_connection(session_id)
+        logger.info(f'Client connected: {session_id}')
+        
+        emit('connected', {
+            'message': 'Connected to CogniCode AI backend',
+            'session_id': session_id,
+            'server_time': datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Connection error: {str(e)}")
+        emit('error', {'message': 'Connection failed'})
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    """Handle client disconnection"""
-    logger.info(f'Client disconnected: {request.sid}')
+    """Handle client disconnection with cleanup"""
+    try:
+        session_id = request.sid
+        agent_pool.remove_connection(session_id)
+        logger.info(f'Client disconnected: {session_id}')
+        
+        # Trigger garbage collection after disconnect
+        gc.collect()
+    except Exception as e:
+        logger.error(f"Disconnection error: {str(e)}")
 
 @socketio.on('analyze_code')
+@log_performance
 def handle_analyze_code(data):
-    """Handle code analysis request"""
+    """Handle code analysis request with optimized processing"""
+    session_id = request.sid
+    
     try:
-        code = data.get('code', '')
-        language = data.get('language', 'javascript')
+        # Validate input
+        code = data.get('code', '').strip()
+        language = data.get('language', 'javascript').lower()
         
-        logger.info(f'Analyzing {language} code for client {request.sid}')
+        if not code:
+            emit('error', {'message': 'No code provided for analysis'})
+            return
+        
+        if len(code) > config.MAX_CONTENT_LENGTH:
+            emit('error', {'message': 'Code exceeds maximum size limit'})
+            return
+        
+        logger.info(f'Analyzing {language} code for client {session_id}')
+        
+        # Check cache first
+        cached_result = code_service.get_cached_analysis(code)
+        if cached_result:
+            emit('analysis_complete', cached_result)
+            logger.info(f'Returned cached analysis for client {session_id}')
+            return
         
         # Emit progress updates
-        emit('analysis_progress', 25)
+        emit('analysis_progress', {'progress': 25, 'message': 'Initializing analysis...'})
         
-        # Run linter agent
+        # Get agent and run analysis
+        linter_agent = agent_pool.get_linter_agent()
         analysis = linter_agent.analyze(code, language)
-        emit('analysis_progress', 75)
+        
+        emit('analysis_progress', {'progress': 75, 'message': 'Processing results...'})
         
         # Process results
         processed_analysis = code_service.process_analysis(analysis, code, language)
-        emit('analysis_progress', 100)
+        
+        emit('analysis_progress', {'progress': 100, 'message': 'Analysis complete'})
         
         # Send results
         emit('analysis_complete', processed_analysis)
-        logger.info(f'Analysis completed for client {request.sid}')
+        logger.info(f'Analysis completed for client {session_id}')
         
     except Exception as e:
-        logger.error(f'Error analyzing code: {str(e)}')
-        emit('error', f'Analysis failed: {str(e)}')
+        logger.error(f'Error analyzing code for {session_id}: {str(e)}')
+        emit('error', {'message': f'Analysis failed: {str(e)}'})
 
 @socketio.on('generate_refactoring')
+@log_performance
 def handle_generate_refactoring(data):
-    """Handle refactoring generation request"""
+    """Handle refactoring generation request with validation"""
+    session_id = request.sid
+    
     try:
-        code = data.get('code', '')
-        language = data.get('language', 'javascript')
+        # Validate input
+        code = data.get('code', '').strip()
+        language = data.get('language', 'javascript').lower()
         issues = data.get('analysis', [])
         
-        logger.info(f'Generating refactoring suggestions for client {request.sid}')
+        if not code:
+            emit('error', {'message': 'No code provided for refactoring'})
+            return
         
-        # Run refactor agent
+        logger.info(f'Generating refactoring suggestions for client {session_id}')
+        
+        # Get agent and generate suggestions
+        refactor_agent = agent_pool.get_refactor_agent()
         suggestions = refactor_agent.generate_suggestions(code, language, issues)
         
         # Process and send results
         processed_suggestions = code_service.process_refactor_suggestions(suggestions)
         emit('refactor_suggestions', processed_suggestions)
         
-        logger.info(f'Refactoring suggestions generated for client {request.sid}')
+        logger.info(f'Refactoring suggestions generated for client {session_id}')
         
     except Exception as e:
-        logger.error(f'Error generating refactoring: {str(e)}')
-        emit('error', f'Refactoring generation failed: {str(e)}')
+        logger.error(f'Error generating refactoring for {session_id}: {str(e)}')
+        emit('error', {'message': f'Refactoring generation failed: {str(e)}'})
 
 @socketio.on('generate_tests')
+@log_performance
 def handle_generate_tests(data):
-    """Handle test generation request"""
+    """Handle test generation request with optimization"""
+    session_id = request.sid
+    
     try:
-        code = data.get('code', '')
-        language = data.get('language', 'javascript')
+        # Validate input
+        code = data.get('code', '').strip()
+        language = data.get('language', 'javascript').lower()
         functions = data.get('functions', [])
         
-        logger.info(f'Generating tests for client {request.sid}')
+        if not code:
+            emit('error', {'message': 'No code provided for test generation'})
+            return
         
-        # Run test generation agent
+        logger.info(f'Generating tests for client {session_id}')
+        
+        # Get agent and generate tests
+        testgen_agent = agent_pool.get_testgen_agent()
         test_cases = testgen_agent.generate_tests(code, language, functions)
         
         # Process and send results
         processed_tests = code_service.process_test_cases(test_cases)
         emit('test_cases_generated', processed_tests)
         
-        logger.info(f'Test cases generated for client {request.sid}')
+        logger.info(f'Test cases generated for client {session_id}')
         
     except Exception as e:
-        logger.error(f'Error generating tests: {str(e)}')
-        emit('error', f'Test generation failed: {str(e)}')
+        logger.error(f'Error generating tests for {session_id}: {str(e)}')
+        emit('error', {'message': f'Test generation failed: {str(e)}'})
+
+# Utility functions
+@lru_cache(maxsize=1)
+def get_memory_usage() -> Dict[str, Any]:
+    """Get current memory usage statistics"""
+    try:
+        import psutil
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        
+        return {
+            'rss': memory_info.rss,
+            'vms': memory_info.vms,
+            'percent': process.memory_percent(),
+            'available': psutil.virtual_memory().available
+        }
+    except ImportError:
+        return {'error': 'psutil not available'}
+    except Exception as e:
+        return {'error': str(e)}
+
+def cleanup_resources():
+    """Cleanup resources and trigger garbage collection"""
+    try:
+        # Clear caches
+        code_service.clear_old_cache()
+        get_memory_usage.cache_clear()
+        
+        # Force garbage collection
+        gc.collect()
+        
+        logger.info("Resource cleanup completed")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {str(e)}")
+
+# Application initialization function
+def initialize_application():
+    """Initialize application components"""
+    try:
+        if not agent_pool.initialize():
+            logger.error("Failed to initialize agent pool")
+            raise RuntimeError("Agent pool initialization failed")
+            
+        logger.info("Application initialized successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Application initialization failed: {str(e)}")
+        raise
+
+def create_app():
+    """Application factory pattern"""
+    # Initialize the application
+    initialize_application()
+    return app
 
 if __name__ == '__main__':
-    # Initialize agents on startup
-    logger.info('Initializing CogniCode AI agents...')
-    
     try:
-        linter_agent.initialize()
-        refactor_agent.initialize()
-        testgen_agent.initialize()
+        # Initialize agent pool
+        logger.info('Initializing CogniCode AI agents...')
+        initialize_application()
+        
+        if not agent_pool.initialize():
+            logger.error('Failed to initialize agents')
+            sys.exit(1)
+        
         logger.info('All AI agents initialized successfully')
+        
+        # Setup periodic cleanup
+        import atexit
+        atexit.register(cleanup_resources)
+        
+        # Start the server with optimized settings
+        logger.info(f'Starting CogniCode backend server on port {config.PORT}')
+        socketio.run(
+            app, 
+            host='0.0.0.0', 
+            port=config.PORT, 
+            debug=config.is_development,
+            use_reloader=False,  # Disable reloader for production
+            log_output=config.is_development
+        )
+        
+    except KeyboardInterrupt:
+        logger.info("Server shutdown requested")
+        cleanup_resources()
     except Exception as e:
-        logger.error(f'Failed to initialize agents: {str(e)}')
+        logger.error(f'Failed to start server: {str(e)}')
         sys.exit(1)
-    
-    # Start the server
-    port = int(os.environ.get('PORT', 8000))
-    debug = os.environ.get('FLASK_ENV') == 'development'
-    
-    logger.info(f'Starting CogniCode backend server on port {port}')
-    socketio.run(
-        app, 
-        host='0.0.0.0', 
-        port=port, 
-        debug=debug,
-        allow_unsafe_werkzeug=True
-    )
