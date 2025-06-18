@@ -19,7 +19,7 @@ export function useSocket() {
         const { io } = await import('socket.io-client');
         
         // Use environment variable for backend URL with fallback to localhost
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
         
         const socketInstance = io(backendUrl, {
           transports: ['websocket'],

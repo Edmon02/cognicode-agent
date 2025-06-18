@@ -128,7 +128,9 @@ export default function AnalysisPanel({ analysis, isLoading }: AnalysisPanelProp
           <Separator className="my-4" />
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>Lines of Code: <span className="font-medium">{metrics.linesOfCode}</span></div>
-            <div>Functions: <span className="font-medium">{functions.length}</span></div>
+            {(functions && functions.length) > 0 && (
+              <div>Functions: <span className="font-medium">{functions.length}</span></div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -151,7 +153,7 @@ export default function AnalysisPanel({ analysis, isLoading }: AnalysisPanelProp
                 {issues.map((issue, index) => {
                   const Icon = SEVERITY_ICONS[issue.severity];
                   const colorClass = SEVERITY_COLORS[issue.severity];
-                  
+
                   return (
                     <div key={index} className="flex items-start space-x-3 p-3 rounded-lg border">
                       <Icon className={`h-4 w-4 mt-0.5 ${colorClass}`} />
