@@ -12,7 +12,7 @@ import AnalysisPanel from '@/components/analysis-panel';
 import RefactorPanel from '@/components/refactor-panel';
 import TestGenPanel from '@/components/testgen-panel';
 import Header from '@/components/header';
-import { useSocket } from '@/hooks/use-socket';
+import { useSocket } from '@/hooks/use-socket-real';
 import { CodeAnalysis, RefactorSuggestion, TestCase } from '@/types/analysis';
 import { Play, Zap, TestTube, Code2, Brain, Shield } from 'lucide-react';
 import { toast } from 'sonner';
@@ -32,14 +32,28 @@ console.log(fibonacci(10));`);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisMessage, setAnalysisMessage] = useState('');
 
-  const { socket, isConnected } = useSocket();
+  const { socket, isConnected, error } = useSocket();
+
+  // Show connection status
+  useEffect(() => {
+    if (error) {
+      // Only show error if it's a meaningful error message
+      if (error !== 'Connection failed' || !isConnected) {
+        toast.error(`Connection issue: ${error}`);
+      }
+    } else if (isConnected) {
+      toast.success('Connected to CogniCode AI backend');
+    }
+  }, [isConnected, error]);
 
   // Handle socket events
   useEffect(() => {
     if (!socket) return;
 
     socket.on('analysis_complete', (data: CodeAnalysis) => {
+      console.log('📊 Analysis complete:', data);
       setAnalysis(data);
       setIsAnalyzing(false);
       setAnalysisProgress(100);
@@ -47,21 +61,45 @@ console.log(fibonacci(10));`);
     });
 
     socket.on('refactor_suggestions', (data: RefactorSuggestion[]) => {
+      console.log('🔄 Refactor suggestions:', data);
       setRefactorSuggestions(data);
       toast.success('Refactoring suggestions generated!');
     });
 
     socket.on('test_cases_generated', (data: TestCase[]) => {
+      console.log('🧪 Test cases generated:', data);
       setTestCases(data);
       toast.success('Unit tests generated!');
     });
 
-    socket.on('analysis_progress', (progress: number) => {
-      setAnalysisProgress(progress);
+    socket.on('analysis_progress', (data: any) => {
+      console.log('📈 Progress data:', data);
+      
+      // Handle both object and number formats
+      if (typeof data === 'object' && data !== null) {
+        if (typeof data.progress === 'number') {
+          setAnalysisProgress(data.progress);
+        }
+        if (typeof data.message === 'string') {
+          setAnalysisMessage(data.message);
+        }
+      } else if (typeof data === 'number') {
+        setAnalysisProgress(data);
+        setAnalysisMessage('');
+      }
     });
 
-    socket.on('error', (error: string) => {
-      toast.error(`Error: ${error}`);
+    socket.on('error', (error: any) => {
+      console.error('❌ Socket error:', error);
+      
+      let errorMessage = 'Unknown error occurred';
+      if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        errorMessage = error.message || JSON.stringify(error);
+      }
+      
+      toast.error(`Error: ${errorMessage}`);
       setIsAnalyzing(false);
     });
 
@@ -80,8 +118,13 @@ console.log(fibonacci(10));`);
       return;
     }
 
+    console.log('🔬 Starting analysis for code:', code.substring(0, 100) + '...');
+    console.log('📡 Language:', language);
+    console.log('🔌 Socket connected:', isConnected);
+
     setIsAnalyzing(true);
     setAnalysisProgress(0);
+    setAnalysisMessage('Initializing...');
     setAnalysis(null);
     setRefactorSuggestions([]);
     setTestCases([]);
@@ -93,7 +136,7 @@ console.log(fibonacci(10));`);
     });
 
     toast.info('Starting code analysis...');
-  }, [socket, code, language]);
+  }, [socket, code, language, isConnected]);
 
   const generateRefactoring = useCallback(() => {
     if (!socket || !code.trim()) {
@@ -127,7 +170,7 @@ console.log(fibonacci(10));`);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      <Header />
+      <Header isConnected={isConnected} connectionError={error} />
       
       <main className="container mx-auto px-4 py-8 space-y-8">
         {/* Hero Section */}
@@ -171,6 +214,9 @@ console.log(fibonacci(10));`);
                 <div className="flex items-center space-x-2">
                   <Progress value={analysisProgress} className="w-32" />
                   <span className="text-sm text-muted-foreground">{analysisProgress}%</span>
+                  {analysisMessage && (
+                    <span className="text-xs text-muted-foreground ml-2">{analysisMessage}</span>
+                  )}
                 </div>
               )}
             </div>

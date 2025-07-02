@@ -195,29 +195,6 @@ def internal_server_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 # API Routes with proper error handling and performance optimizations
-@app.route('/health', methods=['GET'])
-@log_performance
-def health_check():
-    """Health check endpoint with comprehensive status"""
-    try:
-        pool_status = agent_pool.get_status()
-        
-        return jsonify({
-            'status': 'healthy',
-            'timestamp': datetime.utcnow().isoformat(),
-            'version': '2.0.0',
-            'environment': config.FLASK_ENV,
-            'agents': {
-                'linter': pool_status.get('linter_agents', 0) > 0,
-                'refactor': pool_status.get('refactor_agents', 0) > 0,
-                'testgen': pool_status.get('testgen_agents', 0) > 0
-            },
-            'pool_status': pool_status,
-            'memory_usage': get_memory_usage()
-        })
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
 
 @app.route('/api/agents/status', methods=['GET'])
 @log_performance
@@ -266,9 +243,19 @@ def get_agents_status():
 def handle_connect():
     """Handle client connection with proper session management"""
     try:
-        session_id = request.sid
+        from flask import request as flask_request
+        session_id = getattr(flask_request, 'sid', 'unknown')
         agent_pool.add_connection(session_id)
         logger.info(f'Client connected: {session_id}')
+        
+        # Initialize agent pool if not already done
+        if not agent_pool._initialized:
+            if agent_pool.initialize():
+                logger.info('Agent pool initialized successfully')
+            else:
+                logger.error('Failed to initialize agent pool')
+                emit('error', {'message': 'Backend initialization failed'})
+                return
         
         emit('connected', {
             'message': 'Connected to CogniCode AI backend',
@@ -276,30 +263,39 @@ def handle_connect():
             'server_time': datetime.utcnow().isoformat()
         })
     except Exception as e:
-        logger.error(f"Connection error: {str(e)}")
+        logger.error(f"Connection error: {str(e)}", exc_info=True)
         emit('error', {'message': 'Connection failed'})
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection with cleanup"""
     try:
-        session_id = request.sid
+        from flask import request as flask_request
+        session_id = getattr(flask_request, 'sid', 'unknown')
         agent_pool.remove_connection(session_id)
         logger.info(f'Client disconnected: {session_id}')
         
         # Trigger garbage collection after disconnect
         gc.collect()
     except Exception as e:
-        logger.error(f"Disconnection error: {str(e)}")
+        logger.error(f"Disconnection error: {str(e)}", exc_info=True)
 
 @socketio.on('analyze_code')
 @log_performance
 def handle_analyze_code(data):
     """Handle code analysis request with optimized processing"""
-    session_id = request.sid
+    try:
+        from flask import request as flask_request
+        session_id = getattr(flask_request, 'sid', 'unknown')
+    except:
+        session_id = 'unknown'
     
     try:
         # Validate input
+        if not data or not isinstance(data, dict):
+            emit('error', {'message': 'Invalid data format'})
+            return
+            
         code = data.get('code', '').strip()
         language = data.get('language', 'javascript').lower()
         
@@ -320,11 +316,14 @@ def handle_analyze_code(data):
             logger.info(f'Returned cached analysis for client {session_id}')
             return
         
-        # Emit progress updates
+        # Emit progress updates with proper format
         emit('analysis_progress', {'progress': 25, 'message': 'Initializing analysis...'})
         
         # Get agent and run analysis
         linter_agent = agent_pool.get_linter_agent()
+        
+        emit('analysis_progress', {'progress': 50, 'message': 'Running analysis...'})
+        
         analysis = linter_agent.analyze(code, language)
         
         emit('analysis_progress', {'progress': 75, 'message': 'Processing results...'})
@@ -339,14 +338,21 @@ def handle_analyze_code(data):
         logger.info(f'Analysis completed for client {session_id}')
         
     except Exception as e:
-        logger.error(f'Error analyzing code for {session_id}: {str(e)}')
+        logger.error(f'Error analyzing code for {session_id}: {str(e)}', exc_info=True)
         emit('error', {'message': f'Analysis failed: {str(e)}'})
+    finally:
+        # Ensure we always reset analyzing state
+        socketio.sleep(1)  # Small delay to ensure messages are sent
 
 @socketio.on('generate_refactoring')
 @log_performance
 def handle_generate_refactoring(data):
     """Handle refactoring generation request with validation"""
-    session_id = request.sid
+    try:
+        from flask import request as flask_request
+        session_id = getattr(flask_request, 'sid', 'unknown')
+    except:
+        session_id = 'unknown'
     
     try:
         # Validate input
@@ -371,14 +377,18 @@ def handle_generate_refactoring(data):
         logger.info(f'Refactoring suggestions generated for client {session_id}')
         
     except Exception as e:
-        logger.error(f'Error generating refactoring for {session_id}: {str(e)}')
+        logger.error(f'Error generating refactoring for {session_id}: {str(e)}', exc_info=True)
         emit('error', {'message': f'Refactoring generation failed: {str(e)}'})
 
 @socketio.on('generate_tests')
 @log_performance
 def handle_generate_tests(data):
     """Handle test generation request with optimization"""
-    session_id = request.sid
+    try:
+        from flask import request as flask_request
+        session_id = getattr(flask_request, 'sid', 'unknown')
+    except:
+        session_id = 'unknown'
     
     try:
         # Validate input
@@ -403,7 +413,7 @@ def handle_generate_tests(data):
         logger.info(f'Test cases generated for client {session_id}')
         
     except Exception as e:
-        logger.error(f'Error generating tests for {session_id}: {str(e)}')
+        logger.error(f'Error generating tests for {session_id}: {str(e)}', exc_info=True)
         emit('error', {'message': f'Test generation failed: {str(e)}'})
 
 # Utility functions
@@ -411,19 +421,26 @@ def handle_generate_tests(data):
 def get_memory_usage() -> Dict[str, Any]:
     """Get current memory usage statistics"""
     try:
-        import psutil
-        process = psutil.Process()
-        memory_info = process.memory_info()
-        
-        return {
-            'rss': memory_info.rss,
-            'vms': memory_info.vms,
-            'percent': process.memory_percent(),
-            'available': psutil.virtual_memory().available
-        }
-    except ImportError:
-        return {'error': 'psutil not available'}
+        try:
+            import psutil
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            
+            return {
+                'rss': memory_info.rss,
+                'vms': memory_info.vms,
+                'percent': process.memory_percent(),
+                'available': psutil.virtual_memory().available
+            }
+        except ImportError:
+            # Fallback if psutil is not available
+            return {
+                'rss': 0,
+                'vms': 0,
+                'note': 'psutil not available, using fallback'
+            }
     except Exception as e:
+        logger.error(f'Error getting memory usage: {str(e)}')
         return {'error': str(e)}
 
 def cleanup_resources():
@@ -444,9 +461,64 @@ def cleanup_resources():
 def initialize_application():
     """Initialize application components"""
     try:
+        logger.info("🚀 Initializing CogniCode Agent backend...")
+        
         if not agent_pool.initialize():
             logger.error("Failed to initialize agent pool")
             raise RuntimeError("Agent pool initialization failed")
+        
+        logger.info("✅ Agent pool initialized successfully")
+        
+        # Test basic functionality
+        try:
+            test_agent = agent_pool.get_linter_agent()
+            logger.info("✅ Basic agent functionality verified")
+        except Exception as e:
+            logger.warning(f"Agent verification warning: {str(e)}")
+        
+        logger.info("🎉 CogniCode Agent backend initialization complete!")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Application initialization failed: {str(e)}")
+        return False
+
+# Health check with proper initialization
+@app.route('/health', methods=['GET'])
+@log_performance
+def health_check():
+    """Enhanced health check endpoint with comprehensive status"""
+    try:
+        # Initialize agents if not already done
+        if not agent_pool._initialized:
+            agent_pool.initialize()
+        
+        pool_status = agent_pool.get_status()
+        
+        status = {
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'version': '2.0.0',
+            'environment': config.FLASK_ENV,
+            'agents': {
+                'linter_agents': pool_status.get('linter_agents', 0),
+                'refactor_agents': pool_status.get('refactor_agents', 0), 
+                'testgen_agents': pool_status.get('testgen_agents', 0),
+                'active_connections': pool_status.get('active_connections', 0),
+                'initialized': pool_status.get('initialized', False)
+            },
+            'memory': get_memory_usage()
+        }
+        
+        return jsonify(status), 200
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
             
         logger.info("Application initialized successfully")
         return True

@@ -1,20 +1,46 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Moon, Sun, Github, Brain } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Moon, Sun, Github, Brain, Wifi, WifiOff } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
 
-export default function Header() {
+interface HeaderProps {
+  isConnected?: boolean;
+  connectionError?: string | null;
+}
+
+export default function Header({ isConnected = false, connectionError }: HeaderProps) {
   const { theme, setTheme } = useTheme();
 
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Brain className="h-6 w-6 text-blue-600" />
-            <span className="text-xl font-bold">CogniCode Agent</span>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Brain className="h-6 w-6 text-blue-600" />
+              <span className="text-xl font-bold">CogniCode Agent</span>
+            </div>
+            
+            {/* Connection Status Indicator */}
+            <Badge 
+              variant={isConnected ? "default" : "destructive"} 
+              className="flex items-center space-x-1"
+            >
+              {isConnected ? (
+                <>
+                  <Wifi className="h-3 w-3" />
+                  <span>Connected</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="h-3 w-3" />
+                  <span>Disconnected</span>
+                </>
+              )}
+            </Badge>
           </div>
           
           <div className="flex items-center space-x-4">

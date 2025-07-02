@@ -40,11 +40,8 @@ export function useSocket() {
           console.log('Connection failed:', error);
           setIsConnected(false);
           
-          // For demo purposes, simulate connection after delay
-          setTimeout(() => {
-            setIsConnected(true);
-            simulateBackendResponses(socketInstance);
-          }, 2000);
+          // Don't automatically fall back to simulation - let user know connection failed
+          console.warn('Unable to connect to backend. Please ensure the backend server is running on', backendUrl);
         });
 
         setSocket(socketInstance);

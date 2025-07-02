@@ -64,7 +64,16 @@ export default function AnalysisPanel({ analysis, isLoading }: AnalysisPanelProp
     );
   }
 
-  const { issues, metrics, functions } = analysis;
+  // Safely extract data with fallbacks
+  const issues = analysis.issues || [];
+  const metrics = analysis.metrics || {
+    complexity: 0,
+    maintainability: 10,
+    linesOfCode: 0,
+    codeQualityScore: 10
+  };
+  const functions = analysis.functions || [];
+  
   const errorCount = issues.filter(i => i.severity === 'error').length;
   const warningCount = issues.filter(i => i.severity === 'warning').length;
   const infoCount = issues.filter(i => i.severity === 'info').length;
@@ -96,7 +105,7 @@ export default function AnalysisPanel({ analysis, isLoading }: AnalysisPanelProp
               <div className="text-sm text-muted-foreground">Info</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-500">{metrics.codeQualityScore}</div>
+              <div className="text-2xl font-bold text-green-500">{metrics.codeQualityScore || 10}</div>
               <div className="text-sm text-muted-foreground">Quality Score</div>
             </div>
           </div>
@@ -113,21 +122,21 @@ export default function AnalysisPanel({ analysis, isLoading }: AnalysisPanelProp
             <div>
               <div className="flex justify-between text-sm">
                 <span>Complexity</span>
-                <span>{metrics.complexity}/10</span>
+                <span>{metrics.complexity || 0}/10</span>
               </div>
-              <Progress value={metrics.complexity * 10} className="mt-1" />
+              <Progress value={(metrics.complexity || 0) * 10} className="mt-1" />
             </div>
             <div>
               <div className="flex justify-between text-sm">
                 <span>Maintainability</span>
-                <span>{metrics.maintainability}/10</span>
+                <span>{metrics.maintainability || 10}/10</span>
               </div>
-              <Progress value={metrics.maintainability * 10} className="mt-1" />
+              <Progress value={(metrics.maintainability || 10) * 10} className="mt-1" />
             </div>
           </div>
           <Separator className="my-4" />
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>Lines of Code: <span className="font-medium">{metrics.linesOfCode}</span></div>
+            <div>Lines of Code: <span className="font-medium">{metrics.linesOfCode || 0}</span></div>
             {(functions && functions.length) > 0 && (
               <div>Functions: <span className="font-medium">{functions.length}</span></div>
             )}
