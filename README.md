@@ -80,7 +80,19 @@ npm run dev
 
 </details>
 
-## 📖 Usage
+## 📖 Documentation
+
+**📚 [Complete Documentation](docs/README.md)** - Comprehensive guides and references
+
+### Quick Links
+- **🚀 [Installation Guide](docs/user-guide/installation.md)** - Detailed setup instructions
+- **📖 [Basic Usage](docs/user-guide/basic-usage.md)** - Getting started guide  
+- **🎯 [Features Overview](docs/user-guide/features.md)** - All capabilities explained
+- **🏗️ [Architecture](docs/developer-guide/architecture.md)** - Technical architecture
+- **📡 [API Reference](docs/api/README.md)** - Complete API documentation
+- **🎬 [Demo Guide](docs/demo/demo-guide.md)** - Professional demo materials
+
+## 📖 Quick Usage
 
 1. **Open the Application**: Navigate to `http://localhost:3000`
 2. **Write/Paste Code**: Use the Monaco editor to input your code
@@ -89,6 +101,8 @@ npm run dev
 5. **Review Results**: Check the Analysis, Refactor, and Tests tabs
 6. **Apply Suggestions**: Click "Apply" on refactoring suggestions
 7. **Download Tests**: Export generated unit tests
+
+👉 **[Detailed Usage Guide](docs/user-guide/basic-usage.md)**
 
 ### Example Workflow
 
