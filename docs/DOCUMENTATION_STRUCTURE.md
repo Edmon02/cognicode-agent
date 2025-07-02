@@ -19,6 +19,7 @@ cognicode-agent/
     │   ├── 📄 installation.md             # 📦 Complete installation guide
     │   ├── 📄 basic-usage.md              # 🎯 Getting started & basic usage
     │   ├── 📄 features.md                 # 🚀 Comprehensive features overview
+    │   ├── 📄 troubleshooting.md          # 🔧 Common issues & solutions
     │   └── 📄 faq.md                      # ❓ Frequently asked questions
     │
     ├── 📁 developer-guide/                # 🛠️ Developer Documentation
@@ -46,8 +47,8 @@ cognicode-agent/
 ## 📊 Documentation Metrics
 
 ### 📈 Content Statistics
-- **Total Files**: 12 markdown files
-- **Word Count**: ~15,000 words
+- **Total Files**: 13 markdown files
+- **Word Count**: ~16,500 words
 - **Coverage**: All major features documented
 - **Languages**: English (multi-language planned)
 

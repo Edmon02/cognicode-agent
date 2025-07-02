@@ -519,12 +519,6 @@ def health_check():
             'error': str(e),
             'timestamp': datetime.utcnow().isoformat()
         }), 500
-            
-        logger.info("Application initialized successfully")
-        return True
-    except Exception as e:
-        logger.error(f"Application initialization failed: {str(e)}")
-        raise
 
 def create_app():
     """Application factory pattern"""
